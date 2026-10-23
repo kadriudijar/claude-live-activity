@@ -34,15 +34,15 @@ In the desktop app: click + next to the prompt box, then Plugins, Add marketplac
 
 - `/activity` opens the pane. It docks beside the chat, a third of the window wide, once the terminal is at least 110 columns wide and in Claude Code's fullscreen layout; narrower, it sits above the prompt. From 144 columns it opens by itself when a session starts.
 - What it shows for each tool call:
-  - **Reading a file:** the file's folder with the file picked (`▶`), then the lines read, with a highlight sweeping down them.
+  - **Reading a file:** the file's folder with the file picked (`▶`), then the lines read as syntax-highlighted code with line numbers, a yellow bar sweeping down beside the lines being read.
   - **Running a command:** `$ command` typed out, `running…`, then the output (red when it failed).
-  - **Editing a file:** removed lines struck through in red, added lines in green, and a `+n −m` count.
+  - **Editing a file:** a highlighted diff of the change, and a `+n −m` count.
   - **Web fetches:** the URL and the page text.
   - **Subagents:** their steps are marked `helper ·`.
 - While the pane is on screen, tool rows leave the chat. `ctrl+o` still shows every call in full, and the rows come back when the pane is closed or too narrow to show.
 - Dragging the pane's divider sets your own width, which Claude Code keeps.
 
-It uses no tokens: everything runs inside Claude Code on your machine and nothing is sent to the model. File contents and command output are drawn as plain text, with terminal escape codes removed.
+It uses no tokens: everything runs inside Claude Code on your machine and nothing is sent to the model. Terminal escape codes are removed from file contents and command output before they are drawn.
 
 ## Develop
 

@@ -89,9 +89,16 @@ test('a read opens its folder with the file picked, then shows the lines it read
   expect(await ui.find({ type: 'Text', text: /DS_Store/ })).toBeUndefined()
   await ui.unmount()
 
+  // Mid-read: the lines being read are highlighted code with a yellow bar beside them.
+  await clock.advance(900)
+  ui = await $.ui.mount(PANE)
+  expect((await ui.find({ type: 'Text', text: /▌/ }))?.text).toMatch(/^▌/)
+  expect((await ui.findAll({ type: 'Code' })).map(found => found.props.path)).toContain('/repo/src/a.cs')
+  await ui.unmount()
+
   await clock.advance(5000)
   ui = await $.ui.mount(PANE)
-  expect((await ui.find({ type: 'Text', text: /two/ }))?.text).toContain('2 two')
+  expect((await ui.find({ type: 'Code' }))?.props).toMatchObject({ source: 'one\ntwo', path: '/repo/src/a.cs', startLine: 1 })
   expect((await ui.find({ type: 'Text', text: /read lines/ }))?.text).toBe('Claude read lines 1–2 of 9')
   await ui.unmount()
 })
@@ -169,8 +176,11 @@ test('an edit shows the removed and the added lines', async ($, on) => {
   await clock.advance(5000)
 
   const ui = await $.ui.mount(PANE)
-  expect((await ui.find({ type: 'Text', text: /^- / }))?.text).toBe('- x')
-  expect((await ui.find({ type: 'Text', text: /^\+ / }))?.text).toBe('+ y')
+  expect((await ui.find({ type: 'Code' }))?.props).toMatchObject({
+    source: '@@ -3,2 +3,2 @@\n keep\n-x\n+y',
+    path: '/repo/a.cs',
+    format: 'diff',
+  })
   expect((await ui.find({ type: 'Text', text: /changed/ }))?.text).toBe('Claude changed this file: +1 −1')
   await ui.unmount()
 })
@@ -199,14 +209,27 @@ test('with the pane on screen a tool row draws nothing in the chat, and ctrl+o s
   await ui.unmount()
 })
 
+test('/activity says why the pane sits above the prompt', async ($, on) => {
+  on(
+    'ui.open',
+    () => ({ value: { isPlaced: true } }))
+
+  const narrow = await $.command.run({ command: 'activity', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 90 } })
+  const mainScreen = await $.command.run({ command: 'activity', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 200 } })
+
+  expect(narrow).toMatchObject({ text: 'Live view opened above the prompt: the window is 90 columns wide, and the pane docks beside the chat from 110.' })
+  expect(mainScreen).toMatchObject({ text: expect.stringContaining('fullscreen layout') })
+})
+
 test('/activity opens the pane at a third of the terminal, and a resize keeps it there', async ($, on) => {
   const opened: { id: string; columns?: number }[] = []
   on(
     'ui.open',
     (_, e) => (opened.push({ id: e.id, columns: e.columns }), { value: { isPlaced: true } }))
 
-  await $.command.run({ command: 'activity', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 150 } })
+  const reply = await $.command.run({ command: 'activity', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 150 } })
   const ui = await $.ui.mount({ ...PANE, viewport: { columns: 210, rows: 50, isFullscreen: true } })
+  expect(reply).toMatchObject({ text: 'Live view opened beside the chat, a third of the window wide.' })
   await ui.unmount()
 
   expect(opened).toEqual([{ id: 'live-activity', columns: 48 }, { id: 'live-activity', columns: 68 }])

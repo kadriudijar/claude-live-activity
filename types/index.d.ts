@@ -1,5 +1,5 @@
 export type Entry = { name: string; isDir: boolean }
-export type Hunk = { start: number; lines: string[] }
+export type Hunk = { oldStart: number; start: number; lines: string[] }
 export type Part =
   | { kind: 'read'; path: string; folder: Entry[]; startLine: number; totalLines: number; lines: string[] }
   | { kind: 'diff'; path: string; hunks: Hunk[] }

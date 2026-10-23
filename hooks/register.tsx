@@ -15,7 +15,7 @@ const MAX_TEXT = 20_000
 const scene = atom(
   { plugin: 'live-activity', key: 'scene' } as const,
   null,
-  { shape: 'scene-1' })
+  { shape: 'scene-2' })
 const frame = atom(
   { plugin: 'live-activity', key: 'frame' } as const,
   { phase: 'show', at: 0 })
@@ -121,12 +121,14 @@ const partOf = async ($: EngineInterface, e: { tool: string }, ran: ToolCallResu
     const result = ran.result as BuiltinToolResults['Write']
     const hunks = result.structuredPatch.length > 0
       ? result.structuredPatch.map(hunk => ({
+          oldStart: hunk.oldStart,
           start: hunk.newStart,
           lines: hunk.lines
             .slice(0, MAX_LINES)
             .map(clean),
         }))
       : [{
+          oldStart: 0,
           start: 1,
           lines: str(
             e,
@@ -173,7 +175,7 @@ const stepsOf = (shown: Scene): Step[] => {
       ]
     case 'diff': {
       const total = shown.hunks.reduce(
-        (sum, hunk) => sum + hunk.lines.length + 1,
+        (sum, hunk) => sum + hunk.lines.length,
         0)
 
       return range(10)
@@ -275,11 +277,18 @@ export const register: Register = on => {
     'command.run',
     { command: 'activity' },
     async ($, e) => {
+      const { isFullscreen, columns } = e.presentation
       await open(
         $,
-        e.presentation.columns)
+        columns)
+      // The dock beside the chat needs the fullscreen layout and 110 columns; else the pane sits above the prompt.
+      const place = !isFullscreen
+        ? 'above the prompt: docking it beside the chat needs Claude Code\'s fullscreen layout (off under CLAUDE_CODE_NO_FLICKER=0 and in tmux)'
+        : columns < 110
+          ? `above the prompt: the window is ${columns} columns wide, and the pane docks beside the chat from 110`
+          : 'beside the chat, a third of the window wide'
 
-      return { text: 'Live view opened. It sits beside the chat when the window is at least 110 columns wide, else above the prompt.' }
+      return { text: `Live view opened ${place}.` }
     })
 
   on(
@@ -353,7 +362,7 @@ export const register: Register = on => {
     'ui.render',
     { component: 'Pane', requestId: PANE },
     async ($, e) => {
-      const { Box, Text } = $.ui.resolve(e)
+      const { Box, Code, Text } = $.ui.resolve(e)
       // A resize redraws the pane: keep the dock at a third of the new width.
       const terminalColumns = e.viewport?.columns
       if (terminalColumns !== undefined &&
@@ -371,10 +380,10 @@ export const register: Register = on => {
       const columns = Math.max(
         1,
         e.props.bodyColumns)
-      const heightOf = (text = '') =>
+      const heightOf = (text = '', width = columns) =>
         Math.max(
           1,
-          Math.ceil(text.length / columns))
+          Math.ceil(text.length / Math.max(1, width)))
       // The rows left for the content once the caption and the pane's other lines have wrapped.
       const roomFor = (...fixed: string[]) =>
         Math.max(
@@ -382,34 +391,34 @@ export const register: Register = on => {
           e.props.scroll.bodyRows - fixed.reduce(
             (sum, text) => sum + heightOf(text),
             0))
-      // The first line to show so that `focus` sits mid-pane.
-      const startAround = (lines: string[], focus: number, room: number) => {
+      // The helpers below take each line's wrapped height. The first line to show so that `focus` sits mid-pane:
+      const startAround = (heights: number[], focus: number, room: number) => {
         let start = Math.max(
           0,
           focus)
-        for (let used = heightOf(lines[start]); start > 0 && used + heightOf(lines[start - 1]) <= room / 2; start--)
-          used += heightOf(lines[start - 1])
+        for (let used = heights[start] ?? 1; start > 0 && used + (heights[start - 1] ?? 1) <= room / 2; start--)
+          used += heights[start - 1] ?? 1
         return start
       }
       // The end of the lines from `start` on that fit in `room` (at least one).
-      const endFrom = (lines: string[], start: number, room: number) => {
+      const endFrom = (heights: number[], start: number, room: number) => {
         let end = start
-        for (let used = 0; end < lines.length && used + heightOf(lines[end]) <= room; end++)
-          used += heightOf(lines[end])
+        for (let used = 0; end < heights.length && used + (heights[end] ?? 1) <= room; end++)
+          used += heights[end] ?? 1
         return Math.max(
           end,
           start + 1)
       }
       // The start of the last lines that fit in `room` (at least one).
-      const startOfLast = (lines: string[], room: number) => {
-        let start = lines.length
-        for (let used = 0; start > 0 && used + heightOf(lines[start - 1]) <= room; start--)
-          used += heightOf(lines[start - 1])
+      const startOfLast = (heights: number[], room: number) => {
+        let start = heights.length
+        for (let used = 0; start > 0 && used + (heights[start - 1] ?? 1) <= room; start--)
+          used += heights[start - 1] ?? 1
         return Math.min(
           start,
           Math.max(
             0,
-            lines.length - 1))
+            heights.length - 1))
       }
 
       if (now === null) return <Text color="suggestion" wrap="wrap">Waiting for Claude to open, read or run something…</Text>
@@ -433,12 +442,13 @@ export const register: Register = on => {
           caption,
           path,
           status)
+        const heights = names.map(name => heightOf(name))
         const from = startAround(
-          names,
+          heights,
           target,
           room)
         const to = endFrom(
-          names,
+          heights,
           from,
           room)
 
@@ -459,10 +469,12 @@ export const register: Register = on => {
       }
 
       if (now.kind === 'read') {
-        const width = String(now.startLine + now.lines.length).length
-        const numbers = now.lines.map((_, i) => String(now.startLine + i)
-          .padStart(width))
-        const shown = now.lines.map((text, i) => ` ${numbers[i]} ${text}`)
+        // Drawn by the engine's highlighter, language from the file's name. Each wrapped line keeps the
+        // reading marker's column and the line-number gutter (the widest number and a space) free.
+        const codeColumns = columns - 1 - (String(now.startLine + now.lines.length).length + 1)
+        const heights = now.lines.map(text => heightOf(
+          text,
+          codeColumns))
         const path = crumbs(now.path)
         const status = `Claude read lines ${now.startLine}–${now.startLine + now.lines.length - 1} of ${now.totalLines}`
         const room = roomFor(
@@ -472,67 +484,115 @@ export const register: Register = on => {
         const from = at < 0
           ? 0
           : startAround(
-            shown,
+            heights,
             at,
             room)
         const to = endFrom(
-          shown,
+          heights,
           from,
           room)
+        // The lines being read right now, marked by a yellow bar beside them.
+        const bandStart = at < 0
+          ? to
+          : Math.min(
+            Math.max(at, from),
+            to)
+        const bandEnd = at < 0
+          ? to
+          : Math.min(
+            at + BAND,
+            to)
+        const code = (start: number, end: number) => (
+          <Code
+            source={now.lines.slice(start, end).join('\n')}
+            path={now.path}
+            startLine={now.startLine + start}
+            wrap="wrap" />
+        )
+        const bar = heights
+          .slice(bandStart, bandEnd)
+          .reduce(
+            (sum, height) => sum + height,
+            0)
 
         return (
           <Box flexDirection="column">
             {head}
             {where(path)}
-            {now.lines
-              .slice(from, to)
-              .map((text, i) => {
-                const index = from + i
-
-                return index >= at &&
-                  index < at + BAND
-                  ? <Text color="warning" bold wrap="wrap">▌{numbers[index]} {text}</Text>
-                  : <Text color="text" wrap="wrap"><Text color="suggestion"> {numbers[index]}</Text> {text}</Text>
-              })}
+            {bandStart > from && <Box paddingLeft={1}>{code(from, bandStart)}</Box>}
+            {bandEnd > bandStart && (
+              <Box flexDirection="row">
+                <Text color="warning" bold>{Array.from({ length: bar }, () => '▌').join('\n')}</Text>
+                {code(bandStart, bandEnd)}
+              </Box>
+            )}
+            {to > bandEnd && <Box paddingLeft={1}>{code(bandEnd, to)}</Box>}
             {where(status)}
           </Box>
         )
       }
 
       if (now.kind === 'diff') {
-        const lines = now.hunks
-          .flatMap(hunk => ['⋯', ...hunk.lines])
-          .slice(0, at)
-        const added = now.hunks
-          .flatMap(hunk => hunk.lines)
-          .filter(line => line[0] === '+')
+        // Each line with the old and new line numbers it sits at, so any tail of it is a valid diff.
+        const numbered = now.hunks.flatMap((hunk, index) => {
+          let oldLine = hunk.oldStart
+          let newLine = hunk.start
+          return hunk.lines.map(line => {
+            const row = { hunk: index, sign: line[0] ?? ' ', text: line.slice(1), oldLine, newLine }
+            if (row.sign !== '+') oldLine++
+            if (row.sign !== '-') newLine++
+            return row
+          })
+        })
+        const added = numbered
+          .filter(row => row.sign === '+')
           .length
-        const removed = now.hunks
-          .flatMap(hunk => hunk.lines)
-          .filter(line => line[0] === '-')
+        const removed = numbered
+          .filter(row => row.sign === '-')
           .length
-
-        const shown = lines.map(line => (line === '⋯' ? '  ⋯' : `${line[0] === ' ' ? ' ' : line[0]} ${line.slice(1)}`))
         const path = crumbs(now.path)
         const status = `Claude changed this file: +${added} −${removed}`
+        // The diff gutter holds an old and a new line number and the +/− marker.
+        const diffColumns = columns - (2 * String(numbered.at(-1)?.newLine ?? 1).length + 4)
+        const revealed = numbered.slice(0, at)
         const from = startOfLast(
-          shown,
+          revealed.map(row => heightOf(
+            row.text,
+            diffColumns)),
           roomFor(
             caption,
             path,
-            status))
+            status,
+            '@@'))
+        const source = revealed
+          .slice(from)
+          .reduce<{ hunk: number; rows: typeof numbered }[]>(
+            (groups, row) => {
+              const last = groups.at(-1)
+              if (last?.hunk === row.hunk) last.rows.push(row)
+              else groups.push({ hunk: row.hunk, rows: [row] })
+              return groups
+            },
+            [])
+          .map(({ rows }) => {
+            const [first] = rows
+            const olds = rows.filter(row => row.sign !== '+').length
+            const news = rows.filter(row => row.sign !== '-').length
+            return [`@@ -${first?.oldLine ?? 0},${olds} +${first?.newLine ?? 0},${news} @@`, ...rows.map(row => `${row.sign}${row.text}`)].join('\n')
+          })
+          .join('\n')
 
         return (
           <Box flexDirection="column">
             {head}
             {where(path)}
-            {lines
-              .slice(from)
-              .map((line, i) => (
-                line[0] === '+' ? <Text color="success" wrap="wrap">{shown[from + i]}</Text>
-                  : line[0] === '-' ? <Text color="error" strikethrough wrap="wrap">{shown[from + i]}</Text>
-                    : <Text color="text" wrap="wrap">{shown[from + i]}</Text>
-              ))}
+            {source !== '' && (
+              <Code
+                source={source}
+                path={now.path}
+                format="diff"
+                wrap="wrap" />
+            )}
             {where(status)}
           </Box>
         )
@@ -545,7 +605,7 @@ export const register: Register = on => {
         const command = now.isRunning ? now.command.slice(0, at) : now.command
         const status = now.isRunning ? 'running…' : now.isError ? 'failed' : 'done'
         const from = startOfLast(
-          output,
+          output.map(line => heightOf(line)),
           roomFor(
             caption,
             'Terminal',
@@ -568,7 +628,7 @@ export const register: Register = on => {
       if (now.kind === 'web') {
         const lines = now.text.split('\n')
         const to = endFrom(
-          lines,
+          lines.map(line => heightOf(line)),
           0,
           roomFor(
             caption,
