@@ -218,7 +218,7 @@ test('/activity says why the pane sits above the prompt', async ($, on) => {
   const mainScreen = await $.command.run({ command: 'activity', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 200 } })
 
   expect(narrow).toMatchObject({ text: 'Live view opened above the prompt: the window is 90 columns wide, and the pane docks beside the chat from 110.' })
-  expect(mainScreen).toMatchObject({ text: expect.stringContaining('fullscreen layout') })
+  expect(mainScreen).toMatchObject({ text: expect.stringContaining('Run /tui fullscreen') })
 })
 
 test('/activity opens the pane at a third of the terminal, and a resize keeps it there', async ($, on) => {

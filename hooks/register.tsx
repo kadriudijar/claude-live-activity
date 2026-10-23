@@ -283,7 +283,7 @@ export const register: Register = on => {
         columns)
       // The dock beside the chat needs the fullscreen layout and 110 columns; else the pane sits above the prompt.
       const place = !isFullscreen
-        ? 'above the prompt: docking it beside the chat needs Claude Code\'s fullscreen layout (off under CLAUDE_CODE_NO_FLICKER=0 and in tmux)'
+        ? 'above the prompt: docking it beside the chat needs Claude Code\'s fullscreen renderer. Run /tui fullscreen to switch for good (it is saved, and restarts and resumes this session)'
         : columns < 110
           ? `above the prompt: the window is ${columns} columns wide, and the pane docks beside the chat from 110`
           : 'beside the chat, a third of the window wide'
