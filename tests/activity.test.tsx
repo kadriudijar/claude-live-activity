@@ -114,6 +114,28 @@ test('a failing command shows the command, its output and that it failed', async
   await ui.unmount()
 })
 
+test('long lines wrap whole, and only the newest ones that fit once wrapped are shown', async ($, on) => {
+  const clock = world(on)
+  // 30 lines of 120 characters: 3 rows each in a 50-column pane.
+  const lines = Array.from(
+    { length: 30 },
+    (_, i) => `${String(i).padStart(2, '0')} ${'x'.repeat(117)}`)
+  on(
+    'tool.call',
+    () => ({ result: { stdout: lines.join('\n'), stderr: '' } }))
+
+  await $.session.start(SESSION)
+  await $.tool.call({ tool: 'Bash', command: 'cat big.log', description: 'Show the log' })
+  await clock.advance(5000)
+
+  // 20 rows less the caption, "Terminal", the command and "done" leave 16: five 3-row lines.
+  const ui = await $.ui.mount(PANE)
+  expect((await ui.find({ type: 'Text', text: /^29 / }))?.text).toBe(lines[29])
+  expect((await ui.find({ type: 'Text', text: /^25 / }))?.text).toBe(lines[25])
+  expect(await ui.find({ type: 'Text', text: /^24 / })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('terminal escape codes in a command and its output never reach the pane', async ($, on) => {
   const clock = world(on)
   on(
