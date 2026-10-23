@@ -1,0 +1,5 @@
+{
+  "name": "claude-live-activity",
+  "owner": { "name": "kadriudijar" },
+  "plugins": [{ "name": "live-activity", "source": "./" }]
+}

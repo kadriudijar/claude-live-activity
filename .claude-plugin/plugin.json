@@ -1,0 +1,6 @@
+{
+  "name": "live-activity",
+  "version": "0.1.0",
+  "description": "A pane beside the chat that shows each tool call Claude and its subagents make, live",
+  "types": "./types/index.d.ts"
+}
