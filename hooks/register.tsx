@@ -235,6 +235,7 @@ const tick = async ($: EngineInterface) => {
 // The dock takes a third of the terminal (its frame's two columns come off the body).
 // A width the person drags the dock to wins over this.
 let sizedFor = 0
+let isOpenedOnPrompt = false
 const open = ($: EngineInterface, terminalColumns?: number) => {
   if (terminalColumns === undefined) return $.ui.open({ id: PANE, title: 'Live' })
   sizedFor = terminalColumns
@@ -289,6 +290,20 @@ export const register: Register = on => {
           : 'beside the chat, a third of the window wide'
 
       return { text: `Live view opened ${place}.` }
+    })
+
+  // Opened unasked at session start, a pane is placed only from 144 columns; opened on the
+  // person's own prompt, at any width. So the first typed prompt of a session opens it.
+  on(
+    'prompt.submit',
+    async ($, e, next) => {
+      if (!isOpenedOnPrompt &&
+        e.origin?.kind === 'composer') {
+        isOpenedOnPrompt = true
+        await open($).catch(() => undefined)
+      }
+
+      return next(e)
     })
 
   on(

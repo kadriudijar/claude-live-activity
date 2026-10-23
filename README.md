@@ -32,7 +32,7 @@ In the desktop app: click + next to the prompt box, then Plugins, Add marketplac
 
 ## Use
 
-- `/activity` opens the pane. It docks beside the chat, a third of the window wide, once the terminal is at least 110 columns wide and in Claude Code's fullscreen layout; narrower, it sits above the prompt. From 144 columns it opens by itself when a session starts.
+- `/activity` opens the pane. It docks beside the chat, a third of the window wide, once the terminal is at least 110 columns wide and in Claude Code's fullscreen renderer (run `/tui fullscreen` once; it is saved); narrower, it sits above the prompt. It opens by itself on your first prompt of each session.
 - What it shows for each tool call:
   - **Reading a file:** the file's folder with the file picked (`▶`), then the lines read as syntax-highlighted code with line numbers, a yellow bar sweeping down beside the lines being read.
   - **Running a command:** `$ command` typed out, `running…`, then the output (red when it failed).

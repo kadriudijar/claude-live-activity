@@ -209,6 +209,22 @@ test('with the pane on screen a tool row draws nothing in the chat, and ctrl+o s
   await ui.unmount()
 })
 
+test('the first typed prompt of a session opens the pane, so it docks at any width', async ($, on) => {
+  const opened: string[] = []
+  on(
+    'ui.open',
+    (_, e) => (opened.push(e.id), { value: { isPlaced: true } }))
+  on(
+    'prompt.submit',
+    (_, e) => ({ text: e.text }))
+  const typed = (text: string) => ({ text, origin: { kind: 'composer' as const }, wait: false })
+
+  await $.prompt.submit(typed('explain this repo'))
+  await $.prompt.submit(typed('and its tests'))
+
+  expect(opened).toEqual(['live-activity'])
+})
+
 test('/activity says why the pane sits above the prompt', async ($, on) => {
   on(
     'ui.open',
